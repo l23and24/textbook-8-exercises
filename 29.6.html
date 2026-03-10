@@ -1,1 +1,269 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вправа №29.6: Тестування</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #f8fafc;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .canvas-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            height: 550px;
+            background: white;
+            border-radius: 1.5rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+            overflow: hidden;
+            margin: 0 auto;
+        }
+        #physicsCanvas {
+            width: 100%;
+            height: 100%;
+        }
+        .answer-btn {
+            transition: all 0.2s ease;
+            text-align: left;
+            border: 2px solid #e2e8f0;
+        }
+        .answer-btn.correct {
+            background-color: #dcfce7 !important;
+            border-color: #22c55e !important;
+            color: #166534 !important;
+        }
+        .answer-btn.wrong {
+            background-color: #fee2e2 !important;
+            border-color: #ef4444 !important;
+            color: #991b1b !important;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-6xl mx-auto">
+        <header class="text-center mb-6">
+            <h1 class="text-4xl font-bold text-slate-800 mb-2">Вправа №29.6</h1>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 inline-block w-full text-left">
+                <p class="text-slate-700 text-xl leading-relaxed">
+                    До незарядженої металевої гільзи, що виготовлена з металевої фольги, піднесли, не торкаючись, скляну паличку, яка має позитивний заряд. Які з наведених тверджень є правильними?
+                </p>
+            </div>
+        </header>
 
+        <div class="grid lg:grid-cols-5 gap-8 items-start">
+            <div class="lg:col-span-2 bg-white p-6 rounded-2xl shadow-lg border border-slate-200">
+                <div class="mb-6">
+                    <p class="text-sm text-slate-500 font-bold uppercase mb-4">Наближення палички (+)</p>
+                    <input type="range" id="distSlider" min="0" max="100" value="0" class="w-full h-3 bg-slate-200 rounded-lg appearance-none cursor-pointer">
+                    <div class="flex justify-between text-xs font-bold text-slate-400 mt-2">
+                        <span>ДАЛЕКО</span>
+                        <span>БЛИЗЬКО</span>
+                    </div>
+                </div>
+
+                <div class="space-y-4" id="quizContainer">
+                    <p class="font-bold text-slate-700 mb-2">Оберіть правильні варіанти:</p>
+                    
+                    <button class="answer-btn w-full p-4 rounded-xl bg-slate-50 hover:bg-slate-100" data-correct="false">
+                        <strong>А.</strong> Частина гільзи, ближча до палички, набула позитивного заряду.
+                    </button>
+
+                    <button class="answer-btn w-full p-4 rounded-xl bg-slate-50 hover:bg-slate-100" data-correct="true">
+                        <strong>Б.</strong> Гільза загалом залишилася електронейтральною.
+                    </button>
+
+                    <button class="answer-btn w-full p-4 rounded-xl bg-slate-50 hover:bg-slate-100" data-correct="true">
+                        <strong>В.</strong> Під дією поля палички вільні електрони змістилися праворуч.
+                    </button>
+                </div>
+
+                <button id="resetBtn" class="mt-8 w-full bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-900 transition-colors">
+                    Скинути тест
+                </button>
+            </div>
+
+            <div class="lg:col-span-3">
+                <div class="canvas-container">
+                    <canvas id="physicsCanvas"></canvas>
+                    <div id="statusLabel" class="absolute top-6 left-6 bg-slate-800 text-white px-6 py-2 rounded-full text-lg font-bold shadow-lg">
+                        Гільза: Нейтральна
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playSound(type) {
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            if (type === 'correct') {
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(523.25, audioCtx.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.1);
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.3);
+            } else {
+                oscillator.type = 'sawtooth';
+                oscillator.frequency.setValueAtTime(150, audioCtx.currentTime);
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.2);
+            }
+        }
+
+        window.onload = function() {
+            const canvas = document.getElementById('physicsCanvas');
+            const ctx = canvas.getContext('2d');
+            const distSlider = document.getElementById('distSlider');
+            const resetBtn = document.getElementById('resetBtn');
+            const statusLabel = document.getElementById('statusLabel');
+            const quizBtns = document.querySelectorAll('.answer-btn');
+
+            let stickProgress = 0;
+            let currentSleeveAngle = 0;
+            const protons = [];
+            const electrons = [];
+
+            function initParticles() {
+                protons.length = 0;
+                electrons.length = 0;
+                for(let i=0; i<6; i++) {
+                    for(let j=0; j<4; j++) {
+                        let relX = -24 + j * 16;
+                        let relY = -40 + i * 16;
+                        protons.push({ relX, relY });
+                        electrons.push({ relX, relY, curX: 0, curY: 0, initialRelX: relX });
+                    }
+                }
+            }
+
+            function resize() {
+                canvas.width = canvas.parentElement.clientWidth;
+                canvas.height = canvas.parentElement.clientHeight;
+                initParticles();
+            }
+
+            function drawParticle(type, x, y) {
+                ctx.beginPath();
+                ctx.arc(x, y, 6, 0, Math.PI * 2);
+                ctx.fillStyle = type === 'p' ? '#ef4444' : '#3b82f6';
+                ctx.fill();
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 9px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(type === 'p' ? '+' : '−', x, y);
+            }
+
+            function animate() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                const centerX = canvas.width / 2;
+                const hingeX = centerX - 120;
+                const hingeY = 80;
+                const stringLength = 280;
+
+                const targetAngle = stickProgress * 0.32;
+                currentSleeveAngle += (targetAngle - currentSleeveAngle) * 0.08;
+
+                const sleeveX = hingeX + Math.sin(currentSleeveAngle) * stringLength;
+                const sleeveY = hingeY + Math.cos(currentSleeveAngle) * stringLength;
+
+                ctx.strokeStyle = '#64748b';
+                ctx.lineWidth = 10;
+                ctx.lineCap = 'round';
+                ctx.beginPath(); ctx.moveTo(hingeX - 60, hingeY); ctx.lineTo(hingeX + 40, hingeY); ctx.stroke();
+                
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#94a3b8';
+                ctx.beginPath(); ctx.moveTo(hingeX, hingeY); ctx.lineTo(sleeveX, sleeveY - 55); ctx.stroke();
+
+                ctx.save();
+                ctx.translate(sleeveX, sleeveY);
+                ctx.rotate(currentSleeveAngle);
+                ctx.fillStyle = '#f1f5f9';
+                ctx.strokeStyle = '#94a3b8';
+                ctx.lineWidth = 4;
+                ctx.fillRect(-35, -55, 70, 110);
+                ctx.strokeRect(-35, -55, 70, 110);
+                
+                protons.forEach(p => drawParticle('p', p.relX, p.relY));
+                ctx.restore();
+
+                electrons.forEach((e) => {
+                    const containerLimit = 29;
+                    const driftPower = 25; 
+                    let localTargetX = e.initialRelX + (stickProgress * driftPower);
+                    if (localTargetX > containerLimit) localTargetX = containerLimit;
+
+                    const localTargetY = e.relY;
+                    const cosA = Math.cos(currentSleeveAngle);
+                    const sinA = Math.sin(currentSleeveAngle);
+                    const tx = sleeveX + (localTargetX * cosA - localTargetY * sinA);
+                    const ty = sleeveY + (localTargetX * sinA + localTargetY * cosA);
+
+                    e.curX += (tx - e.curX) * 0.15;
+                    e.curY += (ty - e.curY) * 0.15;
+                    drawParticle('e', e.curX, e.curY);
+                });
+
+                const stickTargetX = sleeveX + 130;
+                const stickStartX = canvas.width + 200;
+                const curStickX = stickStartX + (stickTargetX - stickStartX) * stickProgress;
+                const curStickY = sleeveY + 30;
+
+                ctx.save();
+                ctx.translate(curStickX, curStickY);
+                ctx.rotate(-Math.PI / 10);
+                ctx.fillStyle = '#fbbf24';
+                ctx.shadowBlur = 20; ctx.shadowColor = 'rgba(251, 191, 36, 0.5)';
+                ctx.fillRect(-160, -22, 200, 44);
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 24px Arial';
+                ctx.textAlign = 'center';
+                for(let i=0; i<4; i++) ctx.fillText('+', -130 + i*40, 8);
+                ctx.restore();
+
+                requestAnimationFrame(animate);
+            }
+
+            quizBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (audioCtx.state === 'suspended') audioCtx.resume();
+                    const isCorrect = btn.getAttribute('data-correct') === 'true';
+                    btn.classList.add(isCorrect ? 'correct' : 'wrong');
+                    playSound(isCorrect ? 'correct' : 'wrong');
+                });
+            });
+
+            distSlider.addEventListener('input', (e) => {
+                stickProgress = e.target.value / 100;
+                statusLabel.innerText = stickProgress > 0.1 ? "Стан: Поляризація" : "Стан: Нейтральна";
+            });
+
+            resetBtn.addEventListener('click', () => {
+                stickProgress = 0;
+                distSlider.value = 0;
+                quizBtns.forEach(btn => btn.classList.remove('correct', 'wrong'));
+                statusLabel.innerText = "Стан: Нейтральна";
+            });
+
+            window.addEventListener('resize', resize);
+            resize();
+            animate();
+        };
+    </script>
+</body>
+</html>
